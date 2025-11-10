@@ -1,0 +1,1282 @@
+{
+  "name": "My workflow 6",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "select",
+        "table": {
+          "__rl": true,
+          "value": "user_subscriptions",
+          "mode": "list",
+          "cachedResultName": "user_subscriptions"
+        },
+        "returnAll": "",
+        "where": {
+          "values": [
+            {
+              "column": "id",
+              "value": "={{ $json.body.subscription_id }}"
+            },
+            {
+              "column": "user_id",
+              "value": "={{ $json.body.user_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        -3056,
+        -368
+      ],
+      "id": "5e8c6d46-73fa-4ea9-a217-3c3440c0f1bc",
+      "name": "MySQL1",
+      "credentials": {
+        "mySql": {
+          "id": "gEvTrjTjW6m3KJZ1",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const newData = $('Webhook1').first().json.body;\nconst oldData = $items(\"MySQL1\")[0].json;\n\nif (oldData.is_deleted !== 0) {\n  // 记录已删除，不允许更新\n  return [{\n    json: {\n      code: 410,\n      show: 0,\n      msg: \"订阅信息已删除，无法修改\",\n      data: {\n        message: \"订阅信息已删除，无法修改\"\n      }\n    }\n  }];\n}\n\nconst updatableFields = ['keyword', 'url', 'frequency_type', 'frequency_value'];\n\nconst updateParts = [];\n\nfor (const field of updatableFields) {\n  if (field in newData && newData[field] !== oldData[field]) {\n    const value = typeof newData[field] === 'string'\n      ? `'${newData[field].replace(/'/g, \"''\")}'` // 防止SQL注入/语法错误\n      : newData[field];\n    updateParts.push(`${field} = ${value}`);\n  }\n}\n\nif (updateParts.length === 0) {\n  return [{\n    json: {\n      code: 400,\n      show: 0,\n      msg: \"没有可修改字段\",\n      data: {\n        message: \"没有可修改字段\"\n      }\n    }\n  }];\n}\n\n// 后面的返回保持原样不变\nconst sql = `\n  UPDATE user_subscriptions\n  SET ${updateParts.join(', ')}\n  WHERE id = '${newData.subscription_id}'\n    AND user_id = ${newData.user_id}\n    AND is_deleted = 0;\n`;\n\nreturn [{ json: { query: sql.trim(), updated: true } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2848,
+        -368
+      ],
+      "id": "2eb5817a-709b-4f7d-91f4-198d410973c9",
+      "name": "Code2"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "{{ $json.query }}",
+        "options": {
+          "replaceEmptyStrings": true
+        }
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        -2400,
+        -448
+      ],
+      "id": "3ad29671-252b-46d0-8b25-1b0b7a217897",
+      "name": "MySQL2",
+      "credentials": {
+        "mySql": {
+          "id": "gEvTrjTjW6m3KJZ1",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.3,
+      "position": [
+        -1744,
+        -336
+      ],
+      "id": "9786051b-ea47-462c-b916-27d8d2acf6d7",
+      "name": "Respond to Webhook1"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    code: 200,\n    show: 0,\n    msg: \"成功\",\n    data: {\n      message: \"修改成功\"\n    }\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1968,
+        -544
+      ],
+      "id": "bd1047bf-02d5-4a53-8c51-f2e1a04e9f81",
+      "name": "Code3"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c01a37e5-c9f7-41ce-bb87-75c323f11ffd",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -2176,
+        -448
+      ],
+      "id": "2c186125-7ae8-4013-b165-1ec712c65892",
+      "name": "If3"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "31370812-551c-4346-a288-516e08d29661",
+              "leftValue": "={{ $json.updated }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -2624,
+        -368
+      ],
+      "id": "859d6cec-ca01-4e30-a842-32a625590f72",
+      "name": "If4"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    code: 500,\n    show: 0,\n    msg: \"更新失败\",\n    data: {\n      message: \"服务器内部错误，更新数据失败\"\n    }\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1968,
+        -336
+      ],
+      "id": "a14149ee-0415-4097-a372-749579a2b871",
+      "name": "Code5"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE user_subscriptions\nSET is_deleted = 1,\n    updated_at = NOW()\nWHERE id = '{{ $json.id }}'\n  AND user_id = {{ $json.user_id }}\n  AND is_deleted = 0;\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        -2624,
+        -1760
+      ],
+      "id": "dad6257a-73e8-4633-bba1-5d00f5fa6db9",
+      "name": "MySQL3",
+      "credentials": {
+        "mySql": {
+          "id": "gEvTrjTjW6m3KJZ1",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.3,
+      "position": [
+        -1968,
+        -1664
+      ],
+      "id": "44252491-b14a-4840-9fda-ceb5ed885d8e",
+      "name": "Respond to Webhook2"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    code: 200,\n    show: 0,\n    msg: \"成功\",\n    data: {\n      message: \"删除订阅成功\"\n    }\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2176,
+        -1856
+      ],
+      "id": "297e6ad4-6563-446f-8d14-713af184a06b",
+      "name": "Code6"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c01a37e5-c9f7-41ce-bb87-75c323f11ffd",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -2400,
+        -1760
+      ],
+      "id": "42ab76b4-d807-4d43-b30b-0b639ec0ab17",
+      "name": "If6"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    code: 500,\n    show: 0,\n    msg: \"插入失败\",\n    data: {\n      message: \"服务器内部错误，删除数据失败\"\n    }\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2176,
+        -1664
+      ],
+      "id": "912268d4-37c5-4c6f-b675-61c777ab8c9c",
+      "name": "Code7"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "/news/update",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -3280,
+        -368
+      ],
+      "id": "a0e69acd-4587-4d77-a41a-1edb4115f23d",
+      "name": "Webhook1",
+      "webhookId": "c0e453d1-1363-4f0a-aeb4-b7920215daee"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "news/delete",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -3280,
+        -1664
+      ],
+      "id": "f1da28b9-884d-4d27-ba00-eaea8d06be90",
+      "name": "Webhook2",
+      "webhookId": "7607f6a9-6e78-440c-a112-e26db04ac7ff"
+    },
+    {
+      "parameters": {
+        "path": "/news/search",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -3280,
+        32
+      ],
+      "id": "e57fe2d7-e6fd-443a-bed3-467a517e7016",
+      "name": "Webhook3",
+      "webhookId": "388f9cb0-53a9-4d2d-a911-1a248f9cd9c3"
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.3,
+      "position": [
+        -2400,
+        32
+      ],
+      "id": "9a594ff5-ad6c-4ce7-a325-3c739fb9ccb8",
+      "name": "Respond to Webhook3"
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "table": {
+          "__rl": true,
+          "value": "user_subscriptions",
+          "mode": "list",
+          "cachedResultName": "user_subscriptions"
+        },
+        "limit": 10,
+        "where": {
+          "values": [
+            {
+              "column": "user_id",
+              "value": "={{ $json.query.user_id }}"
+            },
+            {
+              "column": "is_deleted",
+              "value": "0"
+            }
+          ]
+        },
+        "options": {
+          "detailedOutput": true
+        }
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        -3056,
+        32
+      ],
+      "id": "7520b0d9-a13f-4869-98f1-3ca07f31593a",
+      "name": "MySQL4",
+      "credentials": {
+        "mySql": {
+          "id": "gEvTrjTjW6m3KJZ1",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json.data;\n\nconst formatted = data.map(record => ({\n  id: record.id, \n  keyword: record.keyword,\n  url: record.url,\n  frequency: `${record.frequency_value} ${record.frequency_type}`\n}));\n\nreturn [\n  {\n    json: {\n      code: 200,\n      show: 1,\n      msg: \"成功\",\n      data: formatted\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2624,
+        -80
+      ],
+      "id": "2a598b13-dc4a-4f86-821f-b60af0683b59",
+      "name": "Code8"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0189d669-35d8-4e64-b8af-452d48230cc0",
+              "leftValue": "={{ $json.data }}",
+              "rightValue": "",
+              "operator": {
+                "type": "array",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -2848,
+        32
+      ],
+      "id": "eeb5eb62-cc0e-4f60-a979-7f9747db7c04",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    code: 404,\n    show: 0,\n    msg: \"未找到订阅记录\",\n    data: {\n      message: \"您还没有订阅记录\"\n    }\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2624,
+        128
+      ],
+      "id": "8eda8646-bcb1-4b46-8690-285d480c6b6b",
+      "name": "Code9"
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "table": {
+          "__rl": true,
+          "value": "user_subscriptions",
+          "mode": "list",
+          "cachedResultName": "user_subscriptions"
+        },
+        "where": {
+          "values": [
+            {
+              "column": "id",
+              "value": "={{ $json.body.subscription_id }}"
+            },
+            {
+              "column": "user_id",
+              "value": "={{ $json.body.user_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        -3056,
+        -1664
+      ],
+      "id": "740db9ec-0f22-4f31-8b81-ca012ace6a1a",
+      "name": "Select rows from a table",
+      "credentials": {
+        "mySql": {
+          "id": "gEvTrjTjW6m3KJZ1",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "37db6e45-d33d-4dd0-994e-51578c1f2fdf",
+              "leftValue": "={{ $json.is_deleted }}",
+              "rightValue": 1,
+              "operator": {
+                "type": "number",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -2848,
+        -1664
+      ],
+      "id": "ad049345-b132-4a15-bb62-aa65833cc39a",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    code: 404,\n    show: 0,\n    msg: \"订阅已删除\",\n    data: {\n      message: \"该订阅已被删除，无法操作\"\n    }\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2176,
+        -1456
+      ],
+      "id": "f8cc1e64-5b9f-4540-91b5-b2ec8feae0b4",
+      "name": "Code11"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "/news/subscribe",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -3280,
+        -1008
+      ],
+      "id": "de5be196-0632-4a75-b41d-0723f1c5057e",
+      "name": "Webhook",
+      "webhookId": "c0e453d1-1363-4f0a-aeb4-b7920215daee"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.3,
+      "position": [
+        -1088,
+        -1008
+      ],
+      "id": "35abfbd2-4d43-4bd1-af5a-e7f226a05d7a",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 生成 UUID v4 的函数\nfunction uuidv4() {\n  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {\n    const r = Math.random() * 16 | 0;\n    const v = c === 'x' ? r : (r & 0x3 | 0x8);\n    return v.toString(16);\n  });\n}\n\n// 获取 Code12 节点的所有输入项\nconst allItems = $('Code12').all();\n\nreturn allItems.map(item => ({\n  json: {\n    subscription_id: uuidv4(),\n    user_id: item.json.user_id,\n    to_user: item.json.to_user,\n    keyword: item.json.keyword,\n    url: item.json.url,\n    frequency_type: item.json.frequency_type,\n    frequency_value: item.json.frequency_value,\n  }\n})); "
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2400,
+        -1104
+      ],
+      "id": "9805f736-5526-46b5-baca-f30887f138b1",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    code: 200,\n    show: 0,\n    msg: \"成功\",\n    data: {\n      message: \"新增订阅成功\"\n    }\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1296,
+        -1200
+      ],
+      "id": "325f9a24-0ff8-465b-b158-a1212e6b1042",
+      "name": "Code1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c01a37e5-c9f7-41ce-bb87-75c323f11ffd",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1520,
+        -1104
+      ],
+      "id": "70a6ba07-4b52-40a2-bc55-09ce54fae783",
+      "name": "If2"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    code: 500,\n    show: 0,\n    msg: \"插入失败\",\n    data: {\n      message: \"服务器内部错误，插入数据失败\"\n    }\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1296,
+        -1008
+      ],
+      "id": "1ea116ee-c1e1-428f-856a-03ca840c91db",
+      "name": "Code4"
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "table": {
+          "__rl": true,
+          "value": "user_subscriptions",
+          "mode": "list",
+          "cachedResultName": "user_subscriptions"
+        },
+        "returnAll": true,
+        "where": {
+          "values": [
+            {
+              "column": "user_id",
+              "value": "={{ $json.user_id }}"
+            },
+            {
+              "column": "keyword",
+              "value": "={{ $json.keyword }}"
+            },
+            {
+              "column": "url",
+              "value": "={{ $json.url }}"
+            }
+          ]
+        },
+        "options": {
+          "detailedOutput": true
+        }
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        -2848,
+        -1008
+      ],
+      "id": "8a240299-3ef0-4db4-839a-694dd7bca10d",
+      "name": "MySQL5",
+      "credentials": {
+        "mySql": {
+          "id": "gEvTrjTjW6m3KJZ1",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    code: 400,\n    show: 0,\n    msg: \"该订阅已经存在\",\n    data: {\n      message: \"请勿重复添加\"\n    }\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1296,
+        -800
+      ],
+      "id": "6ea71c87-0cd1-4c72-bb53-8c84c10b8977",
+      "name": "Code10"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7db6b3c8-7e79-4414-b648-db2cdcacf034",
+              "leftValue": "={{ $json.data }}",
+              "rightValue": "",
+              "operator": {
+                "type": "array",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -2624,
+        -1008
+      ],
+      "id": "5454ba13-6531-4dc7-9042-399f21e25a21",
+      "name": "If5"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Webhook').first().json.body;\n\nif (!input || !input.keyword || typeof input.keyword !== 'string') {\n  throw new Error(\"字段 'keyword' 缺失或不是字符串\");\n}\n\nconst keywords = input.keyword\n  .split(/[,，]/)\n  .map(k => k.trim())\n  .filter(Boolean);\n\nreturn keywords.map(kw => ({\n  json: {\n    ...input,\n    keyword: kw\n  }\n}));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3056,
+        -1008
+      ],
+      "id": "1661f16a-aec7-4279-ada0-56ba019b9541",
+      "name": "Code12"
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "table": {
+          "__rl": true,
+          "value": "user_subscriptions",
+          "mode": "list",
+          "cachedResultName": "user_subscriptions"
+        },
+        "returnAll": true,
+        "where": {
+          "values": [
+            {
+              "column": "user_id",
+              "value": "={{ $json.user_id }}"
+            },
+            {
+              "column": "keyword",
+              "value": "={{ $json.keyword }}"
+            },
+            {
+              "column": "to_user",
+              "value": "={{ $json.to_user }}"
+            }
+          ]
+        },
+        "options": {
+          "detailedOutput": true
+        }
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        -2176,
+        -1104
+      ],
+      "id": "c725befc-ce3b-4593-9d52-ed803ce866ed",
+      "name": "Select rows from a table1",
+      "credentials": {
+        "mySql": {
+          "id": "gEvTrjTjW6m3KJZ1",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const existingItems = $input.all();\nconst existingKeywords = existingItems.map(item => item.json.keyword);\n\nconst allItems = $('Code').all();\n\nconst filtered = allItems.filter(item => !existingKeywords.includes(item.json.keyword));\n\nreturn filtered;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1968,
+        -1104
+      ],
+      "id": "c9b48627-cf70-4638-97f7-d116752230a5",
+      "name": "Code14"
+    },
+    {
+      "parameters": {
+        "table": {
+          "__rl": true,
+          "value": "user_subscriptions",
+          "mode": "list",
+          "cachedResultName": "user_subscriptions"
+        },
+        "dataMode": "defineBelow",
+        "valuesToSend": {
+          "values": [
+            {
+              "column": "user_id",
+              "value": "={{ $json.user_id }}"
+            },
+            {
+              "column": "keyword",
+              "value": "={{ $json.keyword }}"
+            },
+            {
+              "column": "url",
+              "value": "={{ $json.url }}"
+            },
+            {
+              "column": "frequency_type",
+              "value": "={{ $json.frequency_type }}"
+            },
+            {
+              "column": "frequency_value",
+              "value": "={{ $json.frequency_value }}"
+            },
+            {
+              "column": "id",
+              "value": "={{ $json.subscription_id }}"
+            },
+            {
+              "column": "to_user",
+              "value": "={{ $json.to_user }}"
+            }
+          ]
+        },
+        "options": {
+          "replaceEmptyStrings": true
+        }
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        -1744,
+        -1104
+      ],
+      "id": "05b9982c-8aed-4ccf-be08-f8b93a44541d",
+      "name": "Insert rows in a table",
+      "credentials": {
+        "mySql": {
+          "id": "gEvTrjTjW6m3KJZ1",
+          "name": "MySQL account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "MySQL1": {
+      "main": [
+        [
+          {
+            "node": "Code2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code2": {
+      "main": [
+        [
+          {
+            "node": "If4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code3": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If3": {
+      "main": [
+        [
+          {
+            "node": "Code3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MySQL2": {
+      "main": [
+        [
+          {
+            "node": "If3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If4": {
+      "main": [
+        [
+          {
+            "node": "MySQL2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code5": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code6": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If6": {
+      "main": [
+        [
+          {
+            "node": "Code6",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code7": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MySQL3": {
+      "main": [
+        [
+          {
+            "node": "If6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook1": {
+      "main": [
+        [
+          {
+            "node": "MySQL1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook2": {
+      "main": [
+        [
+          {
+            "node": "Select rows from a table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook3": {
+      "main": [
+        [
+          {
+            "node": "MySQL4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MySQL4": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code8": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Code8",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code9",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code9": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select rows from a table": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "MySQL3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code11",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code11": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code12",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Select rows from a table1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code1": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If2": {
+      "main": [
+        [
+          {
+            "node": "Code1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code4": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MySQL5": {
+      "main": [
+        [
+          {
+            "node": "If5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code10": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If5": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code10",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code12": {
+      "main": [
+        [
+          {
+            "node": "MySQL5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select rows from a table1": {
+      "main": [
+        [
+          {
+            "node": "Code14",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code14": {
+      "main": [
+        [
+          {
+            "node": "Insert rows in a table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert rows in a table": {
+      "main": [
+        [
+          {
+            "node": "If2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "7d2bd0ff-e639-4503-91a6-eedcaee3571f",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4055ac0c01c77eacc446f4fb4a74a714f43e475726d826b9f7996e28a65cf842"
+  },
+  "id": "fIwy3mFU97mUe0zQ",
+  "tags": []
+}
