@@ -108,15 +108,14 @@ news_crawler/
 
 ## 📊 API Endpoints
 
-### Health Check
+### 增删改查(control by n8n workflow6)
 ```
-GET /health
+post /news/update
+post /news/subscribe
+post /news/delete
+get /news/search
 ```
 
-### System Metrics
-```
-GET /metrics?minutes=10
-```
 
 ### Fetch User News
 ```
@@ -204,18 +203,3 @@ tail -f logs/news_crawler_*.log
 grep "ERROR" logs/news_crawler_*.log
 ```
 
-## 🤝 贡献指南
-
-1. Fork 项目
-2. 创建功能分支
-3. 提交更改
-4. 推送到分支
-5. 创建 Pull Request
-
-## 📄 许可证
-
-本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
-
-## 📞 支持
-
-如有问题或建议，请创建 Issue 或联系维护团队。
