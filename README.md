@@ -1,12 +1,11 @@
 # News Crawler System v2.0
 
-An intelligent system for automated news crawling, summarization, and personalized delivery. It supports multi-user subscription management, task scheduling, and system monitoring.
+An intelligent system for automated news crawling and summarization. It supports multi-user subscription management, task scheduling, and system monitoring.
 
 ## 🚀 Features
 
 - **Automated Crawling**: Efficiently fetch news data with batch processing and retry mechanisms.
 - **AI-Powered Summarization**: Generate concise summaries and categorize news using AI.
-- **Personalized Delivery**: Schedule and deliver news content tailored to user preferences.
 - **System Monitoring**: Real-time performance and health monitoring.
 - **RESTful API**: Comprehensive API for seamless integration.
 - **Configuration Management**: Centralized configuration with environment variable support.
@@ -78,7 +77,7 @@ To deploy the n8n workflow automation system, you can use Docker. Refer to the o
 news_crawler/
 ├── main.py              # Application entry point
 ├── core/                # Core modules (config, database, models, exceptions)
-├── services/            # Business logic (crawling, monitoring, pushing, summarization)
+├── services/            # Business logic (crawling, monitoring, summarization)
 ├── n8n_workflow/        # Automated workflows for crawling
 ├── utils/               # Utility functions and logging
 ├── requirements.txt     # Dependency list
@@ -122,11 +121,6 @@ get /news/search
 GET /crawl/news/{user_id}/subscriptions/news?page=1&page_size=10
 ```
 
-### Manual Push
-```
-POST /admin/push_now
-```
-
 ### Manual Crawl and Summarize
 ```
 POST /crawl_and_summarize
@@ -162,11 +156,6 @@ Content-Type: application/json
 - Executes every 24 hours
 - Retries failed subscriptions
 - Batch processing to prevent overload
-
-### Scheduled Delivery
-- Daily delivery at 8:00 AM
-- Supports manual trigger
-- Tracks delivery status
 
 ## 🛡️ Security Features
 

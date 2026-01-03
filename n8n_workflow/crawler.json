@@ -1,0 +1,643 @@
+{
+  "name": "My workflow 5",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.output;\nconst content = typeof raw === 'string' ? raw : '';\n\n// 获取 </think> 后的部分\nconst parts = content.split('</think>');\nconst afterThink = parts.length > 0 ? parts[parts.length - 1].trim() : '';\n\n// 找到第一个非空行作为 URL\nconst lines = afterThink.split('\\n').map(line => line.trim()).filter(Boolean);\nconst candidate = lines.length > 0 ? lines[0] : '';\n\n// 校验是否是 http 或 https 开头的合法 URL\nif (candidate.startsWith('http://') || candidate.startsWith('https://')) {\n  return [\n    {\n      json: {\n        url: candidate\n      }\n    }\n  ];\n} else {\n  // 返回说明信息而不是空数组\n  return [\n    {\n      json: {\n        url: \"无相关url\"\n      }\n    }\n  ];\n}\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1472,
+        768
+      ],
+      "id": "456aeda4-ace5-4785-8a18-75c3956bba36",
+      "name": "Code7"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        896,
+        768
+      ],
+      "id": "e9875790-def6-4a9b-81ed-ed04f9bf65c2",
+      "name": "Wait",
+      "webhookId": "59fc5e27-50f7-415f-a51f-17172a5abb9e"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "test",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        768
+      ],
+      "id": "0b8d906a-811d-4ffe-914c-a39e9328507f",
+      "name": "Webhook1",
+      "webhookId": "02ee1062-7b18-41b6-b8e7-37b812e9dbbd"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"keyword\": \"{{ $json.encoded }}\",\n  \"website\":\"{{ $('MySQL').item.json.data[0].url }}\"\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        672,
+        768
+      ],
+      "id": "2b721112-1702-4d39-a959-cc7f6e3919a1",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "table": {
+          "__rl": true,
+          "value": "user_subscriptions",
+          "mode": "list",
+          "cachedResultName": "user_subscriptions"
+        },
+        "where": {
+          "values": [
+            {
+              "column": "id",
+              "value": "={{ $json.body.subscription_id }}"
+            }
+          ]
+        },
+        "options": {
+          "detailedOutput": true
+        }
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        224,
+        768
+      ],
+      "id": "ce6b6922-3a61-4cd0-a3a2-63165d1c88f1",
+      "name": "MySQL",
+      "credentials": {
+        "mySql": {
+          "id": "TBH2U9nwjGhtLOS3",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const keyword = $input.first().json.data[0].keyword;\n\nreturn [\n  {\n    json: {\n      original: keyword,\n      encoded: encodeURIComponent(keyword)\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        768
+      ],
+      "id": "983486cb-55df-458e-9185-2b458c1f710b",
+      "name": "Code17"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1200,
+        992
+      ],
+      "id": "0499fedd-ead1-45fc-96cf-e9539382e51b",
+      "name": "OpenAI Chat Model13",
+      "credentials": {
+        "openAiApi": {
+          "id": "MwudhzNiV5y6ku0p",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=关键词： {{ $json.keyword }}，网址：{{ $json.website }}",
+        "options": {
+          "systemMessage": "=你是一个严格遵守规范的新闻搜索链接生成器。用户提供关键词（已 URL 编码）和新闻网站网址。你的目标是生成该平台的新闻搜索 URL，必须严格按照以下规则操作：\n\n【操作规则】\n\n根据用户提供的网址 {{ $json.website }}，在下方已知平台模板中查找对应模板（关键词部分使用 <关键词> 占位）。\n\n找到匹配模板后，将模板中的 <关键词> 替换为用户提供的 {{ $json.keyword }}（关键词已 URL 编码，禁止再次编码）。\n\n如果没有任何匹配模板，则输出：\"无相关url\"\n\n最终输出格式必须严格为一行完整 URL：\n\n❗禁止换行\n❗禁止输出匹配过程或任何说明\n❗禁止输出 JSON、Markdown、对象结构\n❗禁止输出多于一行或任何额外文字\n\n【已支持平台模板】\n\n百度新闻：https://news.baidu.com/ns?word=<关键词>\n新浪新闻：https://search.sina.com.cn/?q=<关键词>&c=news\n搜狗新闻：https://news.sogou.com/news?query=<关键词>\n360新闻：https://www.so.com/s?q=<关键词>&src=news\n网易新闻：https://www.163.com/search?keyword=<关键词>\n凤凰新闻：https://search.ifeng.com/sofeng/search.action?q=<关键词>&c=1\n今日头条：https://so.toutiao.com/search?keyword=<关键词>\n知乎：https://www.zhihu.com/search?type=content&q=<关键词>\n微信公众号文章（搜狗）：https://weixin.sogou.com/weixin?type=2&query=<关键词>\n微博：https://s.weibo.com/weibo?q=<关键词>\nB站：https://search.bilibili.com/all?keyword=<关键词>\n豆瓣：https://www.douban.com/search?q=<关键词>\n百度贴吧：https://tieba.baidu.com/f?kw=<关键词>\n腾讯新闻：https://news.qq.com/search?query=<关键词>&page=1\n搜狐新闻：https://search.sohu.com/?keyword=<关键词>\n\n\n【输出格式要求】\n只输出一条正确的 URL\n\n❌ 错误示例（全部禁止）：\nhttps://news.163.com/search/?q=xxx（不是已知模板）\n\n{\"url\": \"xxx\"}\n\n下面是你要的链接：https://xxx\n\n（任何换行、解释、JSON、结构化输出都禁止）\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        768
+      ],
+      "id": "0589e772-e43a-4040-8036-f4fb615983ff",
+      "name": "AI Agent13"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        3824,
+        992
+      ],
+      "id": "4f8698ba-4b44-4f4d-9d44-54c4ad701f3a",
+      "name": "OpenAI Chat Model3",
+      "credentials": {
+        "openAiApi": {
+          "id": "MwudhzNiV5y6ku0p",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        3024,
+        992
+      ],
+      "id": "3e301729-5ba7-41fa-941a-2b506610cee3",
+      "name": "OpenAI Chat Model2",
+      "credentials": {
+        "openAiApi": {
+          "id": "MwudhzNiV5y6ku0p",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        2000,
+        992
+      ],
+      "id": "22e7295e-fda6-4d26-9a10-0775a6fb37e5",
+      "name": "OpenAI Chat Model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "MwudhzNiV5y6ku0p",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.3,
+      "position": [
+        4320,
+        768
+      ],
+      "id": "cfaf040a-a4e5-44b6-b477-8e412a5c3d35",
+      "name": "Respond to Webhook1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const allItems = $input.all();\nlet newsData = [];\n\n// 遍历所有输入项\nfor (const item of allItems) {\n  const rawContent = item.json.output || \"\";\n\n  // 尝试提取 JSON 数组文本\n  const jsonMatch = rawContent.match(/(\\[.*\\])/s);\n\n  if (jsonMatch) {\n    try {\n      const parsed = JSON.parse(jsonMatch[1]);\n      if (Array.isArray(parsed)) {\n        newsData.push(...parsed);\n      }\n    } catch (e) {\n      // 解析失败忽略\n    }\n  } else if (Array.isArray(rawContent)) {\n    newsData.push(...rawContent);\n  } else if (typeof rawContent === 'object' && rawContent !== null) {\n    newsData.push(rawContent);\n  }\n}\n\n// 只提取需要的字段\nconst articles = newsData.map(item => ({\n  title: item.title || '',\n  summary: item.summary || '',\n  url: item.url || ''\n}));\n\n// 包装成指定 JSON 结构\nreturn [\n  {\n    json: {\n      articles: articles\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4096,
+        768
+      ],
+      "id": "4f7aff8c-e2f5-4017-931d-9ee4fff53c75",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=html： \n{{ $json.data }}",
+        "options": {
+          "systemMessage": "你是一个 HTML 内容解析器。请从输入的 HTML 字符串中提取所有新闻块的结构化信息。每条新闻包含以下字段：\n\n- title：从对应新闻块的 <h1> 标签中提取文本内容\n- category：从包含“分类：”字样的 <h2> 标签中提取“分类：”后面的内容\n- sentiment：从包含“情感倾向：”字样的 <h2> 标签中提取“情感倾向：”后面的内容\n- summary：对应新闻块中 <p> 标签的纯文本内容\n- images：提取对应新闻块内所有 <img> 标签的 src 属性，组成数组\n- url：从新闻块中提取原新闻链接地址，通常是 <a> 标签的 href 属性，或包含“原文链接”字样的标签中提取 URL\n\n请返回格式为严格的 JSON 数组，每个新闻对象形如：\n\n[\n  {\n    \"title\": \"新闻标题\",\n    \"category\": \"分类内容\",\n    \"sentiment\": \"情感倾向内容\",\n    \"summary\": \"正文摘要\",\n    \"images\": [\"图片URL1\", \"图片URL2\"],\n    \"url\": \"https://原文链接.com/...\"\n  },\n  ...\n]\n\n请确保：\n\n1. 输出的 JSON 结构正确无语法错误  \n2. 字段值均为字符串（图片为字符串数组）  \n3. 无多余注释或非 JSON 内容  \n4. 只返回 JSON 内容，不要额外说明或其他格式"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        3744,
+        768
+      ],
+      "id": "45336d1d-489b-4c9b-8960-92092abe76bb",
+      "name": "AI Agent4"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=原文内容：{{ $json.data.markdown }}，原文链接：{{ $json.data.metadata.sourceURL }}",
+        "options": {
+          "systemMessage": "=你是一个专业的新闻内容整理助手，你将收到新闻概述内容的正文摘要，新闻源地址与图片说明文本。\n\n请严格按照以下要求完成任务：\n\n1. 根据正文内容进行新闻主题分类（如财经、科技、娱乐、军事、体育、时政等）。\n2. 起一个吸引人的新闻标题，突出重点。\n3. 根据“用户关键词”提取与关键词高度相关的内容，撰写结构清晰、语言简洁、信息集中的简报内容，避免泛泛而谈。如果当前用户输入的内容和关键词没有关系，就输出“本内容与关键词无关”，切记不要输出无关的内容。100字左右。\n4. 判断网页内容的情感倾向，仅输出“正面”、“中性”或“负面”。\n5. 仔细阅读正文摘要及图片说明（desc 或 alt），从提供的图片中选择最多3张与正文内容或者涉及到关键词的（模糊匹配成功的），相关的作为配图。严禁选择与内容无关、缺乏直接关联或凭主观想象判断的图片。如果没有任何合适图片，请不要选择与内容和关键词无关的图片，可以适当说明，如果当前的base_url是vedio，也可以适当说明，不要选择和内容，关键词无关的图片。\n\n以下是输出格式，请严格遵循，注意空行和标题层级：\n\n# 新闻标题（任务2）\n\n## 分类：{任务1输出}\n\n## 情感倾向：{任务4输出}\n\n### 内容摘要：\n\n{简洁的新闻摘要内容}\n\n### 相关配图：\n\n{最多三张符合要求的图片 Markdown 格式，例如：\n\n- ![图片1说明](图片链接)\n\n- ![图片2说明](图片链接)\n\n- ![图片3说明](图片链接)\n\n如果无图片，输出“无相关图片”}\n\n### 原文链接：\n\n{请在此处填写上方提供的 sourceURL，如果没有则输出“无”}\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        2944,
+        768
+      ],
+      "id": "01cc2dab-ac39-483e-bdbc-6eb7fc283eba",
+      "name": "AI Agent3"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=mrakdown内容：{{ $json.data.markdown }}\n\n关键词：{{ $('Edit Fields1').item.json.keyword }}",
+        "options": {
+          "systemMessage": "你是一个新闻链接提取助手，请根据用户提供的关键词和 markdown 内容，按以下要求生成标准 JSON 输出：\n\n你将接收到网页摘要内容，请提取以下字段，并将每条结果作为一个 JSON 对象组成数组返回：\n\n- keyword：关键词，来自用户输入（所有对象相同）\n- source_url：原始网页中的新闻链接，要求与关键词内容相关（如有）\n\n⚠️ 输出要求：\n- 如果 markdown 中存在多个相关新闻链接，请提取多个，分别返回\n- 最终返回一个 JSON 数组，每个元素是一个 JSON 对象\n- 只返回 **纯 JSON 数组**，不要加入任何 markdown 标记（例如 ```json 或 ```）\n- 不要添加任何解释或说明\n- 字段缺失时用空字符串 \"\" 表示\n\n示例输出格式如下（请严格遵守）：\n\n[\n  {\n    \"keyword\": \"AI芯片\",\n    \"source_url\": \"https://example.com/article/123\"\n  },\n  {\n    \"keyword\": \"AI芯片\",\n    \"source_url\": \"https://another.com/ai-chip-news\"\n  }\n]\n\n请根据输入内容完成相应结构化任务，并仅输出上述 JSON 数组格式结果。\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        768
+      ],
+      "id": "8ded060f-c5a2-44eb-8f4e-7bd8476606c8",
+      "name": "AI Agent1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const fullText =  $input.first().json.output|| '';\n\n\n\nlet parsedArray;\n\ntry {\n  parsedArray = JSON.parse(fullText);\n} catch (e) {\n  throw new Error('解析 JSON 失败: ' + e.message);\n}\n\n// 正确返回 n8n 格式的数组，每个 item 包裹为 { json: {...} }\nreturn parsedArray.map(item => ({\n  json: item\n}));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2272,
+        768
+      ],
+      "id": "b5d5149f-99d4-473b-83be-5b0e8edbc294",
+      "name": "Code9"
+    },
+    {
+      "parameters": {
+        "mode": "markdownToHtml",
+        "markdown": "={{ $json.text }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.markdown",
+      "typeVersion": 1,
+      "position": [
+        3520,
+        768
+      ],
+      "id": "eaed87fc-d558-4073-97c4-957eddf9ddd2",
+      "name": "Markdown1"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all()\n  .map(item => {\n    const rawOutput =  $input.first().json.output|| '';\n    const afterThink = rawOutput.split('</think>').pop()?.trim() || '';\n    return {\n      json: {\n        text: afterThink\n      }\n    };\n  })\n  .filter(item => !item.json.text.includes('本内容与关键词无关'));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3296,
+        768
+      ],
+      "id": "3af81a2d-efd7-4b78-bd21-8fe59e0dcc05",
+      "name": "Code2"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        2496,
+        768
+      ],
+      "id": "d207c7f0-a6ca-4f78-9503-d860920c6991",
+      "name": "Limit1"
+    },
+    {
+      "parameters": {
+        "operation": "scrape",
+        "url": "={{ $json.url }}",
+        "requestOptions": {}
+      },
+      "type": "@mendable/n8n-nodes-firecrawl.firecrawl",
+      "typeVersion": 1,
+      "position": [
+        1696,
+        768
+      ],
+      "id": "a83b95cb-8167-4b67-8c26-705cb342f8e5",
+      "name": "Scrape a URL and get its content as markdown, summary, or other formats",
+      "retryOnFail": true,
+      "credentials": {
+        "firecrawlApi": {
+          "id": "pPqUOop0MeGp3KVd",
+          "name": "Firecrawl account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "scrape",
+        "url": "={{ $json.source_url }}",
+        "requestOptions": {}
+      },
+      "type": "@mendable/n8n-nodes-firecrawl.firecrawl",
+      "typeVersion": 1,
+      "position": [
+        2720,
+        768
+      ],
+      "id": "77fa0396-5836-4aa8-831a-15a9b4bc3104",
+      "name": "Scrape a URL and get its content as markdown, summary, or other formats2",
+      "retryOnFail": true,
+      "credentials": {
+        "firecrawlApi": {
+          "id": "pPqUOop0MeGp3KVd",
+          "name": "Firecrawl account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Code7": {
+      "main": [
+        [
+          {
+            "node": "Scrape a URL and get its content as markdown, summary, or other formats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "AI Agent13",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook1": {
+      "main": [
+        [
+          {
+            "node": "MySQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields1": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MySQL": {
+      "main": [
+        [
+          {
+            "node": "Code17",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code17": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model13": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent13",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent13": {
+      "main": [
+        [
+          {
+            "node": "Code7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model3": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent4",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent3",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent4": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent3": {
+      "main": [
+        [
+          {
+            "node": "Code2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent1": {
+      "main": [
+        [
+          {
+            "node": "Code9",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code9": {
+      "main": [
+        [
+          {
+            "node": "Limit1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Markdown1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code2": {
+      "main": [
+        [
+          {
+            "node": "Markdown1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit1": {
+      "main": [
+        [
+          {
+            "node": "Scrape a URL and get its content as markdown, summary, or other formats2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scrape a URL and get its content as markdown, summary, or other formats": {
+      "main": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scrape a URL and get its content as markdown, summary, or other formats2": {
+      "main": [
+        [
+          {
+            "node": "AI Agent3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "f15b9f29-f4f8-4490-b249-29a7db1d1900",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7b686abf4dd97786343bfe17b81e1d250c8eff4b7233cd51416422269d35add0"
+  },
+  "id": "JcAlaRcYkNqOSEu7",
+  "tags": []
+}

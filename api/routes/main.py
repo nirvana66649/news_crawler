@@ -16,10 +16,8 @@ from core.config import app_config, settings
 from utils.logger import get_logger
 from core.exceptions import DatabaseException, ValidationException
 from services.monitoring import system_monitor, start_monitoring_task
-from services.crawler import periodic_crawl, scheduled_push_task
-from services.push import push_pending_news
+from services.crawler import periodic_crawl
 from services.crawler import crawl_and_save
-from services.summary import generate_user_news_summaries
 
 # 初始化日志
 logger = get_logger(__name__)
@@ -50,7 +48,6 @@ async def lifespan(app: FastAPI):
         
         # 启动后台任务
         background_tasks.append(asyncio.create_task(periodic_crawl()))
-        background_tasks.append(asyncio.create_task(scheduled_push_task()))
         background_tasks.append(asyncio.create_task(start_monitoring_task()))
         logger.info("✅ 后台任务启动成功")
         
@@ -88,7 +85,7 @@ async def lifespan(app: FastAPI):
 # 创建FastAPI应用
 app = FastAPI(
     title="新闻爬虫API",
-    description="智能新闻爬取、汇总和推送系统",
+    description="智能新闻爬取和汇总系统",
     version="2.0.0",
     debug=app_config.debug,
     lifespan=lifespan
@@ -190,79 +187,78 @@ async def get_user_news(
     page: int = Query(1, ge=1, description="页码，从1开始"),
     page_size: int = Query(10, ge=1, le=100, description="每页数量，最大100"),
 ):
-    """获取用户新闻汇总"""
+    """获取用户新闻文章列表"""
     # 参数验证
     if user_id <= 0:
         raise ValidationException("user_id", str(user_id), "必须是正整数")
     
     offset = (page - 1) * page_size
-    logger.info(f"获取用户 {user_id} 新闻汇总: page={page}, size={page_size}")
+    logger.info(f"获取用户 {user_id} 新闻文章: page={page}, size={page_size}")
 
     try:
         async with get_db_cursor() as cur:
-            # 获取总数
+            # 1. 获取用户所有订阅 ID
             await cur.execute(
-                "SELECT COUNT(*) AS total FROM news_summary WHERE user_id = %s",
+                "SELECT id FROM user_subscriptions WHERE user_id = %s AND is_deleted = 0",
                 (user_id,)
             )
+            sub_rows = await cur.fetchall()
+            if not sub_rows:
+                 return StandardResponse(
+                    code=404,
+                    show=0,
+                    msg="用户无订阅",
+                    data=PaginatedNewsSummary(items=[], total=0, page=page, page_size=page_size)
+                )
+            
+            sub_ids = [row['id'] for row in sub_rows]
+            sub_ids_str = ",".join(f"'{sid}'" for sid in sub_ids)
+
+            # 2. 获取总数 (通过 subscription_matches 关联)
+            count_sql = f"""
+                SELECT COUNT(DISTINCT a.id) as total
+                FROM news_articles a
+                JOIN subscription_matches m ON a.id = m.article_id
+                WHERE m.subscription_id IN ({sub_ids_str})
+            """
+            await cur.execute(count_sql)
             total_result = await cur.fetchone()
             total = total_result["total"] if total_result else 0
             
-            logger.debug(f"用户 {user_id} 共有 {total} 条新闻汇总")
+            logger.debug(f"用户 {user_id} 共有 {total} 条新闻")
 
             if total == 0:
-                logger.info(f"用户 {user_id} 暂无新闻汇总")
+                logger.info(f"用户 {user_id} 暂无新闻")
                 return StandardResponse(
                     code=404,
                     show=0,
-                    msg="暂无新闻汇总",
+                    msg="暂无新闻",
                     data=PaginatedNewsSummary(items=[], total=0, page=page, page_size=page_size)
                 )
 
-            # 获取分页数据
-            await cur.execute("""
-                SELECT summary_json, summary_date
-                FROM news_summary
-                WHERE user_id = %s
-                ORDER BY summary_date DESC
+            # 3. 获取分页数据
+            # 注意：这里可能需要去重，因为同一文章可能匹配多个订阅
+            sql = f"""
+                SELECT DISTINCT a.title, a.summary, a.url, a.created_at
+                FROM news_articles a
+                JOIN subscription_matches m ON a.id = m.article_id
+                WHERE m.subscription_id IN ({sub_ids_str})
+                ORDER BY a.created_at DESC
                 LIMIT %s OFFSET %s
-            """, (user_id, page_size, offset))
+            """
+            await cur.execute(sql, (page_size, offset))
             rows = await cur.fetchall()
 
             items = []
             for row in rows:
-                try:
-                    summary_obj = json.loads(row["summary_json"])
-                    summary_data = summary_obj.get("summary", {})
-                    urls = summary_obj.get("urls", [])
-                    summary_date = row["summary_date"].isoformat()
+                items.append(NewsSummaryItem(
+                    title=row["title"],
+                    summary=row["summary"],
+                    url=row["url"],
+                    date=row["created_at"].isoformat() if row["created_at"] else ""
+                ))
 
-                    # title 拼接 summary 分类和内容
-                    title_parts = []
-                    for category, entries in summary_data.items():
-                        combined = " ".join(entries)
-                        title_parts.append(f"{category}：{combined}")
-                    full_title = "\n".join(title_parts)
-
-                    # summary 拼接 URL 列表
-                    url_str = "引用链接 " + " 、 ".join(urls) if urls else ""
-
-                    items.append(NewsSummaryItem(
-                        title=full_title,
-                        summary=url_str,
-                        url="",  # 固定空字符串
-                        date=summary_date
-                    ))
-                except Exception as e:
-                    logger.error(f"解析用户 {user_id} 的 summary_json 失败: {e}")
-                    items.append(NewsSummaryItem(
-                        title="数据解析失败",
-                        summary="",
-                        url="",
-                        date=row["summary_date"].isoformat()
-                    ))
-
-            logger.info(f"成功获取用户 {user_id} 新闻汇总: {len(items)} 条")
+            logger.info(f"成功获取用户 {user_id} 新闻: {len(items)} 条")
             return StandardResponse(
                 code=200,
                 show=1,
@@ -276,7 +272,7 @@ async def get_user_news(
             )
 
     except Exception as e:
-        logger.error(f"获取用户 {user_id} 新闻汇总失败: {e}", exc_info=True)
+        logger.error(f"获取用户 {user_id} 新闻失败: {e}", exc_info=True)
         return StandardResponse(
             code=500,
             show=0,
@@ -285,33 +281,9 @@ async def get_user_news(
         )
 
 
-@app.post("/admin/push_now")
-async def manual_push():
-    """手动触发推送"""
-    logger.info("收到手动推送请求")
-    
-    try:
-        result = await push_pending_news()
-        logger.info(f"手动推送完成: {result}")
-        return {
-            "code": 200,
-            "show": 1,
-            "msg": f"手动推送成功，推送用户数: {result['pushed_users']}，推送文章数: {result['pushed_articles']}",
-            "data": result
-        }
-    except Exception as e:
-        logger.error(f"手动推送失败: {e}", exc_info=True)
-        return {
-            "code": 500,
-            "show": 0,
-            "msg": f"手动推送失败: {str(e)}",
-            "data": {}
-        }
-
-
-@app.post("/crawl_and_summarize")
-async def crawl_and_summarize(request: Request):
-    """手动爬取并生成汇总"""
+@app.post("/crawl_and_save")
+async def manual_crawl_and_save(request: Request):
+    """手动爬取"""
     try:
         body = await request.json()
         subscription_id = body.get("subscription_id")
@@ -329,24 +301,16 @@ async def crawl_and_summarize(request: Request):
             logger.error(f"爬取失败: {e}", exc_info=True)
             return {"code": 500, "msg": f"爬取失败: {str(e)}"}
 
-        # 爬取完成后生成汇总
-        try:
-            await generate_user_news_summaries()
-            logger.info("汇总生成完成")
-        except Exception as e:
-            logger.error(f"汇总生成失败: {e}", exc_info=True)
-            return {"code": 500, "msg": f"汇总生成失败: {str(e)}"}
-
         return {
             "code": 200, 
-            "msg": f"订阅 {subscription_id} 爬取并生成汇总成功",
+            "msg": f"订阅 {subscription_id} 爬取成功",
             "data": crawl_result
         }
         
     except ValidationException as e:
         raise HTTPException(status_code=400, detail=e.message)
     except Exception as e:
-        logger.error(f"爬取和汇总操作失败: {e}", exc_info=True)
+        logger.error(f"爬取操作失败: {e}", exc_info=True)
         return {"code": 500, "msg": f"操作失败: {str(e)}"}
 
 

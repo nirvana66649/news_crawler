@@ -5,7 +5,7 @@ import asyncio
 import httpx
 import datetime
 from typing import List, Dict, Any, Optional
-from core.database import get_db_connection, get_db_cursor
+from core.database import get_db_cursor, get_db_transaction_cursor
 import aiomysql
 import pytz
 from core.config import crawler_config, app_config
@@ -173,105 +173,129 @@ async def crawl_subscription(subscription_id: str) -> List[Dict[str, Any]]:
         logger.error(f"爬取订阅失败 {subscription_id}: {e}")
         raise
 
-async def save_news_articles(articles: List[Dict[str, Any]]) -> List[int]:
+async def save_news_articles(articles: List[Dict[str, Any]], cur: Optional[aiomysql.Cursor] = None) -> List[int]:
     """保存新闻文章到数据库"""
     if not articles:
         logger.warning("没有文章需要保存")
         return []
     
     article_ids = []
-    
-    async with get_db_cursor() as cur:
-            for article in articles:
-                url = article.get('url')
-                if not url:
-                    logger.warning(f"文章缺少URL，跳过: {article.get('title', 'Unknown')}")
+
+    async def _run(cursor: aiomysql.Cursor) -> List[int]:
+        for article in articles:
+            url = article.get('url')
+            if not url:
+                logger.warning(f"文章缺少URL，跳过: {article.get('title', 'Unknown')}")
+                continue
+
+            title = article.get('title', '')
+            summary = article.get('summary', '')
+
+            try:
+                await cursor.execute(
+                    """
+                    INSERT INTO news_articles (title, summary, url)
+                    VALUES (%s, %s, %s)
+                    """,
+                    (title, summary, url),
+                )
+                article_id = cursor.lastrowid
+                logger.debug(f"新文章已保存: ID={article_id}, Title={title[:50]}...")
+
+            except aiomysql.IntegrityError:
+                await cursor.execute("SELECT id FROM news_articles WHERE url = %s", (url,))
+                result = await cursor.fetchone()
+                if result:
+                    article_id = result.get("id") if isinstance(result, dict) else result[0]
+                    logger.debug(f"文章已存在: ID={article_id}, Title={title[:50]}...")
+                else:
+                    logger.error(f"无法获取现有文章ID: {url}")
                     continue
-                
-                title = article.get('title', '')
-                summary = article.get('summary', '')
-                
-                try:
-                    # 尝试插入新文章
-                    await cur.execute(
-                        """
-                        INSERT INTO news_articles (title, summary, url)
-                        VALUES (%s, %s, %s)
-                        """,
-                        (title, summary, url)
-                    )
-                    article_id = cur.lastrowid
-                    logger.debug(f"新文章已保存: ID={article_id}, Title={title[:50]}...")
-                    
-                except aiomysql.IntegrityError:
-                    # 文章已存在，获取现有ID
-                    await cur.execute("SELECT id FROM news_articles WHERE url = %s", (url,))
-                    result = await cur.fetchone()
-                    if result:
-                        article_id = result[0]
-                        logger.debug(f"文章已存在: ID={article_id}, Title={title[:50]}...")
-                    else:
-                        logger.error(f"无法获取现有文章ID: {url}")
-                        continue
-                        
-                except Exception as e:
-                    logger.error(f"保存文章失败: {e}, URL: {url}")
-                    raise DatabaseException(f"保存文章失败: {e}")
-                
-                article_ids.append(article_id)
+
+            except Exception as e:
+                logger.error(f"保存文章失败: {e}, URL: {url}")
+                raise DatabaseException(f"保存文章失败: {e}")
+
+            article_ids.append(article_id)
+
+        return article_ids
+
+    if cur is not None:
+        await _run(cur)
+    else:
+        async with get_db_cursor() as cursor:
+            await _run(cursor)
     
     logger.info(f"成功保存/获取 {len(article_ids)} 篇文章")
     return article_ids
-
-async def save_subscription_matches(subscription_id: str, article_ids: List[int]) -> int:
+    
+async def save_subscription_matches(
+    subscription_id: str,
+    article_ids: List[int],
+    cur: Optional[aiomysql.Cursor] = None,
+) -> int:
     """保存订阅匹配关系"""
     if not article_ids:
         logger.warning(f"订阅 {subscription_id} 没有文章需要匹配")
         return 0
     
     saved_count = 0
-    
-    async with get_db_cursor() as cur:
-            for article_id in article_ids:
-                try:
-                    await cur.execute(
-                        """
-                        INSERT INTO subscription_matches (subscription_id, article_id)
-                        VALUES (%s, %s)
-                        """,
-                        (subscription_id, article_id)
-                    )
-                    saved_count += 1
-                    logger.debug(f"订阅匹配已保存: subscription={subscription_id}, article={article_id}")
-                    
-                except aiomysql.IntegrityError:
-                    # 匹配关系已存在，跳过
-                    logger.debug(f"匹配关系已存在: subscription={subscription_id}, article={article_id}")
-                    continue
-                except Exception as e:
-                    logger.error(f"保存匹配关系失败: {e}")
-                    raise DatabaseException(f"保存匹配关系失败: {e}")
+
+    async def _run(cursor: aiomysql.Cursor) -> int:
+        nonlocal saved_count
+        for article_id in article_ids:
+            try:
+                await cursor.execute(
+                    """
+                    INSERT INTO subscription_matches (subscription_id, article_id)
+                    VALUES (%s, %s)
+                    """,
+                    (subscription_id, article_id),
+                )
+                saved_count += 1
+                logger.debug(f"订阅匹配已保存: subscription={subscription_id}, article={article_id}")
+
+            except aiomysql.IntegrityError:
+                logger.debug(f"匹配关系已存在: subscription={subscription_id}, article={article_id}")
+                continue
+            except Exception as e:
+                logger.error(f"保存匹配关系失败: {e}")
+                raise DatabaseException(f"保存匹配关系失败: {e}")
+
+        return saved_count
+
+    if cur is not None:
+        await _run(cur)
+    else:
+        async with get_db_cursor() as cursor:
+            await _run(cursor)
     
     logger.info(f"订阅 {subscription_id} 新增匹配关系 {saved_count} 条")
     return saved_count
 
-async def update_last_crawled(subscription_id: str) -> bool:
+async def update_last_crawled(subscription_id: str, cur: Optional[aiomysql.Cursor] = None) -> bool:
     """更新订阅的最后爬取时间"""
     try:
-        async with get_db_cursor() as cur:
-            await cur.execute(
+        async def _run(cursor: aiomysql.Cursor) -> bool:
+            await cursor.execute(
                 """
                 UPDATE user_subscriptions SET last_crawled_at=NOW() WHERE id=%s
                 """,
-                (subscription_id,)
+                (subscription_id,),
             )
-            
-            if cur.rowcount > 0:
+
+            if cursor.rowcount > 0:
                 logger.debug(f"订阅 {subscription_id} 爬取时间已更新")
                 return True
-            else:
-                logger.warning(f"订阅 {subscription_id} 不存在或未更新")
-                return False
+
+            logger.warning(f"订阅 {subscription_id} 不存在或未更新")
+            return False
+
+        if cur is not None:
+            return await _run(cur)
+
+        async with get_db_cursor() as cursor:
+            return await _run(cursor)
                 
     except Exception as e:
         logger.error(f"更新爬取时间失败: {e}")
@@ -297,17 +321,14 @@ async def crawl_and_save(subscription_id: str) -> Dict[str, Any]:
         
         if not articles:
             raise NoArticlesException(subscription_id)
-        
-        # 3. 保存文章
-        article_ids = await save_news_articles(articles)
-        if not article_ids:
-            raise NoArticlesException(subscription_id)
-        
-        # 4. 保存匹配关系
-        match_count = await save_subscription_matches(subscription_id, article_ids)
-        
-        # 5. 更新爬取时间
-        await update_last_crawled(subscription_id)
+
+        async with get_db_transaction_cursor() as cur:
+            article_ids = await save_news_articles(articles, cur=cur)
+            if not article_ids:
+                raise NoArticlesException(subscription_id)
+
+            match_count = await save_subscription_matches(subscription_id, article_ids, cur=cur)
+            await update_last_crawled(subscription_id, cur=cur)
         
         result = {
             "subscription_id": subscription_id,
