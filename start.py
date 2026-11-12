@@ -37,11 +37,11 @@ def check_dependencies():
 def check_config():
     """检查配置文件"""
     env_file = project_root / '.env'
-    example_file = project_root / 'env.example'
+    example_file = project_root / '.env.example'
     
     if not env_file.exists():
         if example_file.exists():
-            print("⚠️  .env文件不存在，请复制env.example并配置:")
+            print("⚠️  .env文件不存在，请复制.env.example并配置:")
             print(f"cp {example_file} {env_file}")
         else:
             print("❌ 配置文件不存在")

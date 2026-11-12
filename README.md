@@ -24,14 +24,16 @@ An intelligent system for automated news crawling and summarization. It supports
 ### 1. Clone the Repository
 
 ```bash
-git clone <repository_url>
+git clone https://github.com/nirvana66649/news_crawler.git
 cd news_crawler
 ```
 
 ### 2. Create a Virtual Environment
 
+Use Python 3.8+ (`python3` on macOS/Linux). Python 3.12 is recommended.
+
 ```bash
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate  # Linux/Mac
 # or
 venv\Scripts\activate  # Windows
@@ -45,17 +47,23 @@ pip install -r requirements.txt
 
 ### 4. Configure Environment Variables
 
-```bash
-# Copy the environment variable template
-cp env.example .env
+The repository ships `.env.example` only. Copy it to a local `.env` (this file is gitignored and must not be committed):
 
-# Edit the configuration file
-vim .env
+```bash
+cp .env.example .env
 ```
+
+Then edit `.env` and set at least `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_DATABASE`, and `CRAWLER_WEBHOOK_URL`.
 
 ### 5. Initialize the Database
 
-Ensure the MySQL service is running and create the required database and tables.
+Start MySQL 5.7+, then create the application database (name must match `DB_DATABASE` in `.env`, default `news`):
+
+```bash
+mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS news CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+```
+
+News CRUD endpoints need the existing application tables. If MySQL is not running, startup logs a warning and continues. The root endpoint (`GET /`) can still be used to confirm the API process is up.
 
 ### 6. Start the Application
 
@@ -63,25 +71,45 @@ Ensure the MySQL service is running and create the required database and tables.
 # Development environment
 python main.py
 
+# Optional: run dependency / config / DB checks first
+python start.py
+
 # Production environment
 uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 
-### 7. Deploy n8n Workflow Automation
+The API listens on `http://localhost:8000`.
 
-To deploy the n8n workflow automation system, you can use Docker. Refer to the official n8n repository for detailed instructions: [n8n GitHub Repository](https://github.com/n8n-io/n8n).
+### 7. Verify the Setup
+
+```bash
+curl -i http://localhost:8000/
+```
+
+A successful start returns **HTTP 200 OK** with a JSON body similar to:
+
+```json
+{"message": "新闻爬虫系统", "version": "2.0.0", "status": "running"}
+```
+
+### 8. Deploy n8n Workflow Automation (optional)
+
+To deploy the n8n workflow automation system, you can use Docker. Import `n8n_workflow/crawler.json` and `n8n_workflow/RESTful API.json`, then point `CRAWLER_WEBHOOK_URL` at the webhook. Refer to the official n8n repository for detailed instructions: [n8n GitHub Repository](https://github.com/n8n-io/n8n).
 
 ## 📁 Project Structure
 
 ```
 news_crawler/
 ├── main.py              # Application entry point
+├── start.py             # Preflight checks, then start uvicorn
+├── api/                 # FastAPI routes
 ├── core/                # Core modules (config, database, models, exceptions)
 ├── services/            # Business logic (crawling, monitoring, summarization)
 ├── n8n_workflow/        # Automated workflows for crawling
 ├── utils/               # Utility functions and logging
 ├── requirements.txt     # Dependency list
-├── .env.example         # Environment variable template
+├── .env.example         # Environment variable template (copy to .env)
+├── .gitignore
 └── README.md            # Project documentation
 ```
 
@@ -92,7 +120,7 @@ news_crawler/
 - `DB_PORT`: Database port
 - `DB_USER`: Database username
 - `DB_PASSWORD`: Database password
-- `DB_NAME`: Database name
+- `DB_DATABASE`: Database name (this is the variable the app reads; not `DB_NAME`)
 
 ### Crawler Configuration
 - `CRAWLER_WEBHOOK_URL`: API endpoint for the crawler
